@@ -1,4 +1,6 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+import tf_slim as tfs
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import math_ops
 
@@ -84,11 +86,11 @@ def ctc_crnn(params):
     rnn_hidden_layers = params['rnn_layers']
 
     rnn_outputs, _ = tf.nn.bidirectional_dynamic_rnn(
-        tf.contrib.rnn.MultiRNNCell(
-            [tf.nn.rnn_cell.DropoutWrapper(tf.contrib.rnn.BasicLSTMCell(rnn_hidden_units), input_keep_prob=rnn_keep_prob)
+        tf.nn.rnn_cell.MultiRNNCell(
+            [tf.nn.rnn_cell.DropoutWrapper(tf.nn.rnn_cell.BasicLSTMCell(rnn_hidden_units), input_keep_prob=rnn_keep_prob)
              for _ in range(rnn_hidden_layers)]),
-        tf.contrib.rnn.MultiRNNCell(
-            [tf.nn.rnn_cell.DropoutWrapper(tf.contrib.rnn.BasicLSTMCell(rnn_hidden_units), input_keep_prob=rnn_keep_prob)
+        tf.nn.rnn_cell.MultiRNNCell(
+            [tf.nn.rnn_cell.DropoutWrapper(tf.nn.rnn_cell.BasicLSTMCell(rnn_hidden_units), input_keep_prob=rnn_keep_prob)
              for _ in range(rnn_hidden_layers)]),
         features,
         dtype=tf.float32,
@@ -97,7 +99,7 @@ def ctc_crnn(params):
 
     rnn_outputs = tf.concat(rnn_outputs, 2)
 
-    logits = tf.contrib.layers.fully_connected(
+    logits = tfs.layers.fully_connected(
         rnn_outputs,
         params['vocabulary_size'] + 1,  # BLANK
         activation_fn=None,
