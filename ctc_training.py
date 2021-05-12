@@ -7,10 +7,10 @@ import argparse
 
 import os
 
-config = tf.ConfigProto()
-config.gpu_options.allow_growth=True
-tf.reset_default_graph()
-sess = tf.InteractiveSession(config=config)
+# config = tf.ConfigProto()
+# config.gpu_options.allow_growth=True
+# tf.reset_default_graph()
+# sess = tf.InteractiveSession(config=config)
 
 parser = argparse.ArgumentParser(description='Train model.')
 parser.add_argument('-corpus', dest='corpus', type=str, required=True, help='Path to the corpus.')
