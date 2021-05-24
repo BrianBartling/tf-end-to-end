@@ -1,120 +1,96 @@
-import tensorflow.compat.v1 as tf
-tf.disable_v2_behavior()
-import tf_slim as tfs
-from tensorflow.python.framework import ops
-from tensorflow.python.ops import math_ops
+import tensorflow as tf
 
+class CTCLayer(tf.keras.layers.Layer):
+    def __init__(self, name=None):
+        super().__init__(name=name)
+        self.loss_fn = tf.keras.backend.ctc_batch_cost
 
-def leaky_relu(features, alpha=0.2, name=None):
-  with ops.name_scope(name, "LeakyRelu", [features, alpha]):
-    features = ops.convert_to_tensor(features, name="features")
-    alpha = ops.convert_to_tensor(alpha, name="alpha")
-    return math_ops.maximum(alpha * features, features)
+    def call(self, y_true, y_pred):
+        # Compute the training-time loss value and add it
+        # to the layer using `self.add_loss()`.
+        batch_len = tf.cast(tf.shape(y_true)[0], dtype="int64")
+        input_length = tf.cast(tf.shape(y_pred)[1], dtype="int64")
+        label_length = tf.cast(tf.shape(y_true)[1], dtype="int64")
 
+        input_length = input_length * tf.ones(shape=(batch_len, 1), dtype="int64")
+        label_length = label_length * tf.ones(shape=(batch_len, 1), dtype="int64")
 
+        loss = self.loss_fn(y_true, y_pred, input_length, label_length)
+        self.add_loss(loss)
 
-#
-# params["height"] = height of the input image
-# params["width"] = width of the input image
-
-def default_model_params(img_height, vocabulary_size):
-    params = dict()
-    params['img_height'] = img_height
-    params['img_width'] = None
-    params['batch_size'] = 16
-    params['img_channels'] = 1
-    params['conv_blocks'] = 4
-    params['conv_filter_n'] = [32, 64, 128, 256]
-    params['conv_filter_size'] = [ [3,3], [3,3], [3,3], [3,3] ]
-    params['conv_pooling_size'] = [ [2,2], [2,2], [2,2], [2,2] ]
-    params['rnn_units'] = 512
-    params['rnn_layers'] = 2
-    params['vocabulary_size'] = vocabulary_size
-    return params
-
+        # At test time, just return the computed predictions
+        return y_pred
 
 def ctc_crnn(params):
-    # TODO Assert parameters
-
-    input = tf.placeholder(shape=(None,
-                                   params['img_height'],
-                                   params['img_width'],
-                                   params['img_channels']),  # [batch, height, width, channels]
-                            dtype=tf.float32,
-                            name='model_input')
-
-    input_shape = tf.shape(input)
+    input = tf.keras.layers.Input(
+        shape=(params['img_height'], params['img_width'], params['img_channels']), # [batch, height, width, channels]
+        name="model_input", dtype=tf.float32
+    )
+    targets = tf.keras.layers.Input(name="target", shape=(None,), dtype=tf.int32)
 
     width_reduction = 1
     height_reduction = 1
-
 
     # Convolutional blocks
     x = input
     for i in range(params['conv_blocks']):
 
-        x = tf.layers.conv2d(
-            inputs=x,
+        x = tf.keras.layers.Conv2D(
             filters=params['conv_filter_n'][i],
             kernel_size=params['conv_filter_size'][i],
+            activation="relu",
+            kernel_initializer="he_normal",
             padding="same",
-            activation=None)
+            name="Conv" + str(i+1),
+        )(x)
 
-        x = tf.layers.batch_normalization(x)
-        x = leaky_relu(x)
+        x = tf.keras.layers.BatchNormalization()(x)
 
-        x = tf.layers.max_pooling2d(inputs=x,
-                                    pool_size=params['conv_pooling_size'][i],
-                                    strides=params['conv_pooling_size'][i])
+        x = tf.keras.layers.LeakyReLU(alpha=0.2)(x)
+
+        x = tf.keras.layers.MaxPool2D(
+            pool_size = params['conv_pooling_size'][i],
+            strides = params['conv_pooling_size'][i]
+        )(x)
 
         width_reduction = width_reduction * params['conv_pooling_size'][i][1]
         height_reduction = height_reduction * params['conv_pooling_size'][i][0]
 
-
     # Prepare output of conv block for recurrent blocks
-    features = tf.transpose(x, perm=[2, 0, 3, 1])  # -> [width, batch, height, channels] (time_major=True)
-    feature_dim = params['conv_filter_n'][-1] * (params['img_height'] / height_reduction)
-    feature_width = input_shape[2] / width_reduction
-    features = tf.reshape(features, tf.stack([tf.cast(feature_width,'int32'), input_shape[0], tf.cast(feature_dim,'int32')]))  # -> [width, batch, features]
-
-    tf.constant(params['img_height'],name='input_height')
-    tf.constant(width_reduction,name='width_reduction')
+    feature_width = params['img_width']
+    if feature_width:
+        feature_width = feature_width // width_reduction
+    else:
+        feature_width = -1
+    feature_dim = params['conv_filter_n'][-1] * (params['img_height'] // height_reduction)
+#    features = tf.transpose(x, perm=[2, 0, 3, 1]) # -> [width, batch, height, channels] (time_major=True)
+    #features = tf.transpose(x, perm=[])
+    target_shape = (feature_width, feature_dim)
+    features = tf.keras.layers.Reshape(target_shape = target_shape, name="reshape")(x) # not time major
 
     # Recurrent block
-    rnn_keep_prob = tf.placeholder(dtype=tf.float32, name="keep_prob")
     rnn_hidden_units = params['rnn_units']
     rnn_hidden_layers = params['rnn_layers']
 
-    rnn_outputs, _ = tf.nn.bidirectional_dynamic_rnn(
-        tf.nn.rnn_cell.MultiRNNCell(
-            [tf.nn.rnn_cell.DropoutWrapper(tf.nn.rnn_cell.BasicLSTMCell(rnn_hidden_units), input_keep_prob=rnn_keep_prob)
-             for _ in range(rnn_hidden_layers)]),
-        tf.nn.rnn_cell.MultiRNNCell(
-            [tf.nn.rnn_cell.DropoutWrapper(tf.nn.rnn_cell.BasicLSTMCell(rnn_hidden_units), input_keep_prob=rnn_keep_prob)
-             for _ in range(rnn_hidden_layers)]),
-        features,
-        dtype=tf.float32,
-        time_major=True,
-    )
+    features = tf.keras.layers.Dense(64, activation="relu", name="dense1")(features)
+    features = tf.keras.layers.Dropout(0.2)(features)
 
-    rnn_outputs = tf.concat(rnn_outputs, 2)
+    forward_layer = tf.keras.layers.StackedRNNCells([tf.keras.layers.LSTMCell(rnn_hidden_units) for _ in range(rnn_hidden_layers)])
+    forward_layer = tf.keras.layers.RNN(forward_layer, return_sequences=True)
+    backward_layer = tf.keras.layers.StackedRNNCells([tf.keras.layers.LSTMCell(rnn_hidden_units) for _ in range(rnn_hidden_layers)])
+    backward_layer = tf.keras.layers.RNN(backward_layer, return_sequences = True, go_backwards=True)
 
-    logits = tfs.layers.fully_connected(
-        rnn_outputs,
-        params['vocabulary_size'] + 1,  # BLANK
-        activation_fn=None,
-    )
-    
-    tf.add_to_collection("logits",logits) # for restoring purposes
+    rnn_outputs = tf.keras.layers.Bidirectional(forward_layer,
+                                                backward_layer = backward_layer,
+                                                dtype=tf.float32)(features)
+
+    logits = tf.keras.layers.Dense(params['vocabulary_size']+1, activation="softmax", name="dense2")(rnn_outputs)
 
     # CTC Loss computation
-    seq_len = tf.placeholder(tf.int32, [None], name='seq_lengths')
-    targets = tf.sparse_placeholder(dtype=tf.int32, name='target')
-    ctc_loss = tf.nn.ctc_loss(labels=targets, inputs=logits, sequence_length=seq_len, time_major=True)
-    loss = tf.reduce_mean(ctc_loss)
+    output = CTCLayer(name="ctc_loss")(targets, logits)
 
-    # CTC decoding
-    decoded, log_prob = tf.nn.ctc_greedy_decoder(logits, seq_len)
-    # decoded, log_prob = tf.nn.ctc_beam_search_decoder(logits,seq_len,beam_width=50,top_paths=1,merge_repeated=True)
+    model = tf.keras.models.Model(
+        inputs=[input, targets], outputs=output, name="ctc_model_v1"
+    )
 
-    return input, seq_len, targets, decoded, loss, rnn_keep_prob
+    return model

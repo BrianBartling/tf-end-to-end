@@ -1,16 +1,11 @@
-import tensorflow.compat.v1 as tf
-tf.disable_v2_behavior()
-from primus import CTC_PriMuS
-import ctc_utils
+import tensorflow as tf
 import ctc_model
 import argparse
-
+import matplotlib.pyplot as plt
 import os
-
-# config = tf.ConfigProto()
-# config.gpu_options.allow_growth=True
-# tf.reset_default_graph()
-sess = tf.Session()
+import random
+import datetime
+from time import time
 
 parser = argparse.ArgumentParser(description='Train model.')
 parser.add_argument('-corpus', dest='corpus', type=str, required=True, help='Path to the corpus.')
@@ -18,74 +13,188 @@ parser.add_argument('-set',  dest='set', type=str, required=True, help='Path to 
 parser.add_argument('-save_model', dest='save_model', type=str, required=True, help='Path to save the model.')
 parser.add_argument('-vocabulary', dest='voc', type=str, required=True, help='Path to the vocabulary file.')
 parser.add_argument('-semantic', dest='semantic', action="store_true", default=False)
+parser.add_argument('-save_after_ever_epoch', dest='save_after_every_epoch', action="store_true", default=False)
+parser.add_argument('-reduce_lr_on_plateau', dest='reduce_lr_on_plateau', action="store_true", default=False)
 args = parser.parse_args()
 
-# Load primus
 
-primus = CTC_PriMuS(args.corpus,args.set,args.voc, args.semantic, val_split = 0.1)
+def default_model_params(img_height, vocabulary_size):
+    params = dict()
+    params['img_height'] = img_height
+    params['img_width'] = None  # Default image width is None?
+    params['batch_size'] = 16
+    params['img_channels'] = 1
+    params['conv_blocks'] = 4
+    params['conv_filter_n'] = [32, 64, 128, 256]
+    params['conv_filter_size'] = [ [3,3], [3,3], [3,3], [3,3] ]
+    params['conv_pooling_size'] = [ [2,2], [2,2], [2,2], [2,2] ]
+    params['rnn_units'] = 512
+    params['rnn_layers'] = 2
+    params['vocabulary_size'] = vocabulary_size
+    return params
+
+
+@tf.function
+def populate_data(sample_filepath):
+    sample_fullpath = corpus_dirpath + os.sep + sample_filepath + os.sep + sample_filepath
+
+    img_filepath = sample_fullpath
+    if distortions:
+        img_filepath = img_filepath + '_distorted.jpg'
+    else:
+        img_filepath = img_filepath + '.png'
+
+    sample_img = tf.io.read_file(img_filepath)
+    if distortions:
+        sample_img = tf.io.decode_jpeg(sample_img,channels=1)
+    else:
+        sample_img = tf.io.decode_png(sample_img,channels=1)
+    sample_img = tf.image.convert_image_dtype(sample_img, tf.float32)
+    img_width = tf.cast(img_height * len(sample_img[0]) / len(sample_img), tf.int32)
+    model_input = tf.image.resize(sample_img, [img_height, img_width])
+
+    label_file = sample_fullpath
+
+    if semantic:
+        label_file = label_file + '.semantic'
+    else:
+        label_file = label_file + '.agnostic'
+
+    sample_gt_file = tf.io.read_file(label_file)
+    stripped = tf.strings.split(sample_gt_file)
+    sample_gt_plain = tf.strings.split(stripped, sep='\t')
+
+    target = word2int(sample_gt_plain).values
+
+    return {"model_input": model_input, "target": target}
+
+
+word2int = tf.keras.layers.experimental.preprocessing.StringLookup(
+    vocabulary=args.voc, num_oov_indices=0, mask_token=None
+)
+int2word = tf.keras.layers.experimental.preprocessing.StringLookup(
+    vocabulary=word2int.get_vocabulary(), num_oov_indices=0, mask_token=None, invert=True
+)
+
+val_split = 0.1
+batch_size = 1
 
 # Parameterization
 img_height = 128
-params = ctc_model.default_model_params(img_height,primus.vocabulary_size)
+params = default_model_params(img_height,word2int.vocabulary_size())
 max_epochs = 64000
-dropout = 0.5
+early_stopping_patience = 20
+number_of_epochs_before_reducing_learning_rate = 8
+learning_rate_reduction_factor = 0.5
+minimum_learning_rate = 0.00001
+
+semantic = args.semantic
+distortions = False
+corpus_dirpath = args.corpus
+
+# Corpus
+corpus_file = open(args.set,'r')
+corpus_list = corpus_file.read().splitlines()
+corpus_file.close()
+
+# Train and validation split
+random.shuffle(corpus_list) 
+val_idx = int(len(corpus_list) * val_split) 
+training_list = corpus_list[val_idx:]
+validation_list = corpus_list[:val_idx]
+
+print ('Training with ' + str(len(training_list)) + ' and validating with ' + str(len(validation_list)))
+
+start_time = time()
+
+train_dataset = tf.data.Dataset.from_tensor_slices(training_list)
+train_dataset = (
+    train_dataset.map(
+        populate_data, num_parallel_calls=tf.data.experimental.AUTOTUNE
+    )
+    .batch(batch_size)
+    .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+)
+
+validation_dataset = tf.data.Dataset.from_tensor_slices(validation_list)
+validation_dataset = (
+    validation_dataset.map(
+        populate_data, num_parallel_calls=tf.data.experimental.AUTOTUNE
+    )
+    .batch(batch_size)
+    .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+)
+
+# _, ax = plt.subplots(2, 1, figsize=(15, 10))
+# for i,batch in enumerate(train_dataset.take(2)):
+#     image = batch["x"]
+#     label = batch["y"]
+#     ax[i].imshow(np.squeeze(batch['x'], axis=0), cmap="gray")
+#     ax[i].set_title(str(int2word(label).numpy()))
+#     ax[i].axis("off")
+# plt.show()
 
 # Model
-inputs, seq_len, targets, decoded, loss, rnn_keep_prob = ctc_model.ctc_crnn(params)
-train_opt = tf.train.AdamOptimizer().minimize(loss)
+model = ctc_model.ctc_crnn(params)
+print(model.summary())
+tf.keras.utils.plot_model(model, show_shapes=True)
 
+# Optimizer
+optimizer = tf.keras.optimizers.Adam()
+# Compile the model and return
+model.compile(optimizer=optimizer)
 
-saver = tf.train.Saver(max_to_keep=None)
-sess.run(tf.global_variables_initializer())
+# early_stopping = tf.keras.callbacks.EarlyStopping(
+#     monitor="val_loss", patience=early_stopping_patience, restore_best_weights=True
+# )
 
-# Training loop
-for epoch in range(max_epochs):
-    batch = primus.nextBatch(params)
+start_of_training = datetime.date.today()
 
-    _, loss_value = sess.run([train_opt, loss],
-                             feed_dict={
-                                inputs: batch['inputs'],
-                                seq_len: batch['seq_lengths'],
-                                targets: ctc_utils.sparse_tuple_from(batch['targets']),
-                                rnn_keep_prob: dropout,
-                            })
+monitor_variable = 'val_accuracy'
 
-    if epoch % 1000 == 0:
-        # VALIDATION
-        print ('Loss value at epoch ' + str(epoch) + ':' + str(loss_value))
-        print ('Validating...')
+best_model_path = "{0}_{1}".format(start_of_training, model.name)
+if args.save_after_every_epoch:
+    model_checkpoint = tf.keras.callbacks.ModelCheckpoint(best_model_path + "-{epoch:02d}.h5", monitor=monitor_variable,
+            save_best_only=True, verbose=1, save_freq='epoch')
+else:
+    model_checkpoint = tf.keras.callbacks.ModelCheckpoint(best_model_path+".h5", monitor=monitor_variable,
+            save_best_only=True, verbose=1)
+early_stop = tf.keras.callbacks.EarlyStopping(monitor=monitor_variable,
+                            patience=early_stopping_patience,
+                            restore_best_weights=True,
+                            verbose=1)
+learning_rate_reduction = tf.keras.callbacks.ReduceLROnPlateau(monitor=monitor_variable,
+                                                patience=number_of_epochs_before_reducing_learning_rate,
+                                                verbose=1,
+                                                factor=learning_rate_reduction_factor,
+                                                min_lr=minimum_learning_rate)
+tensorboard_callback = tf.keras.callbacks.TensorBoard(
+        log_dir="./logs/{0}_{1}/".format(start_of_training, model.name))
 
-        validation_batch, validation_size = primus.getValidation(params)
-        
-        val_idx = 0
-        
-        val_ed = 0
-        val_len = 0
-        val_count = 0
-            
-        while val_idx < validation_size:
-            mini_batch_feed_dict = {
-                inputs: validation_batch['inputs'][val_idx:val_idx+params['batch_size']],
-                seq_len: validation_batch['seq_lengths'][val_idx:val_idx+params['batch_size']],
-                rnn_keep_prob: 1.0            
-            }            
-                        
-            
-            prediction = sess.run(decoded,
-                                  mini_batch_feed_dict)
-    
-            str_predictions = ctc_utils.sparse_tensor_to_strs(prediction)
-    
+callbacks = [model_checkpoint, early_stop, tensorboard_callback]
 
-            for i in range(len(str_predictions)):
-                ed = ctc_utils.edit_distance(str_predictions[i], validation_batch['targets'][val_idx+i])
-                val_ed = val_ed + ed
-                val_len = val_len + len(validation_batch['targets'][val_idx+i])
-                val_count = val_count + 1
-                
-            val_idx = val_idx + params['batch_size']
-    
-        print ('[Epoch ' + str(epoch) + '] ' + str(1. * val_ed / val_count) + ' (' + str(100. * val_ed / val_len) + ' SER) from ' + str(val_count) + ' samples.')        
-        print ('Saving the model...')
-        saver.save(sess,args.save_model,global_step=epoch)
-        print ('------------------------------')
+if args.reduce_lr_on_plateau:
+    callbacks.append(learning_rate_reduction)
+else:
+    print("Learning-rate reduction on Plateau disabled")
+
+## Should we calculate class weights?
+
+print("Training on dataset...")
+
+# Train the model
+history = model.fit(
+    train_dataset,
+    validation_data=validation_dataset,
+    epochs=max_epochs,
+    callbacks=callbacks
+)
+
+print("Saving model to", args.save_model)
+model.save(args.save_model)
+
+end_time = time()
+execution_time_in_seconds = round(end_time - start_time)
+print("Execution time: {0:.1f}s".format(end_time - start_time))
+
+## Testing...
