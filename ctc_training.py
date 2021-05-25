@@ -81,7 +81,7 @@ batch_size = 1
 
 # Parameterization
 img_height = 128
-params = default_model_params(img_height,word2int.vocabulary_size())
+params = default_model_params(img_height,word2int.vocab_size())
 max_epochs = 64000
 early_stopping_patience = 20
 number_of_epochs_before_reducing_learning_rate = 8
