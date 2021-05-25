@@ -73,7 +73,7 @@ word2int = tf.keras.layers.experimental.preprocessing.StringLookup(
     vocabulary=args.voc, num_oov_indices=0, mask_token=None
 )
 int2word = tf.keras.layers.experimental.preprocessing.StringLookup(
-    vocabulary=word2int.get_vocabulary(), num_oov_indices=0, mask_token=None, invert=True
+    vocabulary=word2int.get_vocab(), num_oov_indices=1, mask_token=None, invert=True
 )
 
 val_split = 0.1
