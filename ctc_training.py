@@ -73,7 +73,7 @@ word2int = tf.keras.layers.experimental.preprocessing.StringLookup(
     vocabulary=args.voc, num_oov_indices=0, mask_token=None
 )
 int2word = tf.keras.layers.experimental.preprocessing.StringLookup(
-    vocabulary=word2int.get_vocab(), mask_token=None, invert=True
+    vocabulary=word2int.get_vocabulary(), mask_token=None, invert=True
 )
 
 val_split = 0.1
@@ -102,6 +102,8 @@ random.shuffle(corpus_list)
 val_idx = int(len(corpus_list) * val_split) 
 training_list = corpus_list[val_idx:]
 validation_list = corpus_list[:val_idx]
+
+steps_per_epoch = len(training_list) // params['batch_size']
 
 print ('Training with ' + str(len(training_list)) + ' and validating with ' + str(len(validation_list)))
 
@@ -187,7 +189,9 @@ history = model.fit(
     train_dataset,
     validation_data=validation_dataset,
     epochs=max_epochs,
-    callbacks=callbacks
+    callbacks=callbacks,
+    batch_size = params['batch_size'],
+    steps_per_epoch = steps_per_epoch
 )
 
 print("Saving model to", args.save_model)
