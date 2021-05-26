@@ -164,7 +164,7 @@ model.compile(optimizer=optimizer)
 
 start_of_training = datetime.date.today()
 
-monitor_variable = 'val_accuracy'
+monitor_variable = 'val_loss'
 
 best_model_path = "{0}_{1}".format(start_of_training, model.name)
 if args.save_after_every_epoch:
