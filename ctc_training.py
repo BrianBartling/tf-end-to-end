@@ -61,10 +61,10 @@ def populate_data(sample_filepath):
         label_file = label_file + '.agnostic'
 
     sample_gt_file = tf.io.read_file(label_file)
-    stripped = tf.strings.split(sample_gt_file)
-    sample_gt_plain = tf.strings.split(stripped, sep='\t')
+    stripped = tf.strings.strip(sample_gt_file)
+    sample_gt_plain = tf.strings.split(stripped)
 
-    target = word2int(sample_gt_plain).values
+    target = tf.cast(word2int(sample_gt_plain), tf.int32)
 
     return {"model_input": model_input, "target": target}
 
@@ -77,7 +77,7 @@ int2word = tf.keras.layers.experimental.preprocessing.StringLookup(
 )
 
 val_split = 0.1
-batch_size = 1
+batch_size = 16
 
 # Parameterization
 img_height = 128
@@ -114,7 +114,13 @@ train_dataset = (
     train_dataset.map(
         populate_data, num_parallel_calls=tf.data.experimental.AUTOTUNE
     )
-    .batch(batch_size)
+    .padded_batch(batch_size, padded_shapes = {
+        'model_input': [img_height, None, 1],
+        'target': [None]
+    }, padding_values = {
+        'model_input': 1.,
+        'target': params['vocabulary_size']+1
+    })
     .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 )
 
@@ -123,18 +129,24 @@ validation_dataset = (
     validation_dataset.map(
         populate_data, num_parallel_calls=tf.data.experimental.AUTOTUNE
     )
-    .batch(batch_size)
+    .padded_batch(batch_size, padded_shapes = {
+        'model_input': [img_height, None, 1],
+        'target': [None]
+    }, padding_values = {
+        'model_input': 1.,
+        'target': params['vocabulary_size']+1
+    })
     .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 )
 
-# _, ax = plt.subplots(2, 1, figsize=(15, 10))
-# for i,batch in enumerate(train_dataset.take(2)):
-#     image = batch["x"]
-#     label = batch["y"]
-#     ax[i].imshow(np.squeeze(batch['x'], axis=0), cmap="gray")
-#     ax[i].set_title(str(int2word(label).numpy()))
-#     ax[i].axis("off")
-# plt.show()
+# # # # _, ax = plt.subplots(2, 1, figsize=(15, 10))
+# # # # for i,batch in enumerate(train_dataset.take(2)):
+# # # #     image = batch["x"]
+# # # #     label = batch["y"]
+# # # #     ax[i].imshow(np.squeeze(batch['x'], axis=0), cmap="gray")
+# # # #     ax[i].set_title(str(int2word(label).numpy()))
+# # # #     ax[i].axis("off")
+# # # # plt.show()
 
 # Model
 model = ctc_model.ctc_crnn(params)
@@ -190,8 +202,6 @@ history = model.fit(
     validation_data=validation_dataset,
     epochs=max_epochs,
     callbacks=callbacks,
-    batch_size = params['batch_size'],
-    steps_per_epoch = steps_per_epoch
 )
 
 print("Saving model to", args.save_model)

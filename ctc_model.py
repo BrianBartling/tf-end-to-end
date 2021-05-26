@@ -84,7 +84,7 @@ def ctc_crnn(params):
                                                 backward_layer = backward_layer,
                                                 dtype=tf.float32)(features)
 
-    logits = tf.keras.layers.Dense(params['vocabulary_size']+1, activation="softmax", name="dense2")(rnn_outputs)
+    logits = tf.keras.layers.Dense(params['vocabulary_size']+2, activation="softmax", name="dense2")(rnn_outputs)
 
     # CTC Loss computation
     output = CTCLayer(name="ctc_loss")(targets, logits)
