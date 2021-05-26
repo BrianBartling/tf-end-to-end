@@ -22,8 +22,6 @@ class CTC_PriMuS:
 
         self.current_idx = 0
 
-        self.packages = ['package_aa', 'package_ab']
-
         # Dictionary
         self.word2int = {}
         self.int2word = {}
@@ -56,14 +54,7 @@ class CTC_PriMuS:
         # Read files
         for _ in range(params['batch_size']):
             sample_filepath = self.training_list[self.current_idx]
-            #sample_fullpath = self.corpus_dirpath + '/' + sample_filepath + '/' + sample_filepath
-
-            sample_fullpath = self.corpus_dirpath + '/'
-            for p in self.packages:
-                test_path = sample_fullpath + p + '/' + sample_filepath
-                if path.exists(test_path):
-                    sample_fullpath = test_path + '/' + sample_filepath
-                    break
+            sample_fullpath = self.corpus_dirpath + '/' + sample_filepath + '/' + sample_filepath
 
             # IMAGE
             if self.distortions:
@@ -121,14 +112,7 @@ class CTC_PriMuS:
     
             # Read files
             for sample_filepath in self.validation_list:
-                #sample_fullpath = self.corpus_dirpath + '/' + sample_filepath + '/' + sample_filepath
-
-                sample_fullpath = self.corpus_dirpath + '/'
-                for p in self.packages:
-                    test_path = sample_fullpath + p + '/' + sample_filepath
-                    if path.exists(test_path):
-                        sample_fullpath = test_path + '/' + sample_filepath
-                        break
+                sample_fullpath = self.corpus_dirpath + '/' + sample_filepath + '/' + sample_filepath
     
                 # IMAGE
                 sample_img = cv2.imread(sample_fullpath + '.png', 0)  # Grayscale is assumed!
