@@ -207,7 +207,7 @@ history = model.fit(
     validation_data=validation_dataset,
     epochs=max_epochs,
     callbacks=callbacks,
-    validation_freq=50
+    validation_freq=5
 )
 
 print("Saving model to", args.save_model)
