@@ -1,5 +1,6 @@
 import argparse
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 import ctc_utils
 import cv2
 import numpy as np
@@ -10,8 +11,9 @@ parser.add_argument('-model', dest='model', type=str, required=True, help='Path 
 parser.add_argument('-vocabulary', dest='voc_file', type=str, required=True, help='Path to the vocabulary file.')
 args = parser.parse_args()
 
-tf.reset_default_graph()
-sess = tf.InteractiveSession()
+# tf.reset_default_graph()
+# sess = tf.InteractiveSession()
+sess = tf.Session()
 
 # Read the dictionary
 dict_file = open(args.voc_file,'r')
@@ -40,7 +42,7 @@ WIDTH_REDUCTION, HEIGHT = sess.run([width_reduction_tensor, height_tensor])
 
 decoded, _ = tf.nn.ctc_greedy_decoder(logits, seq_len)
 
-image = cv2.imread(args.image,False)
+image = cv2.imread(args.image, 0)
 image = ctc_utils.resize(image, HEIGHT)
 image = ctc_utils.normalize(image)
 image = np.asarray(image).reshape(1,image.shape[0],image.shape[1],1)
