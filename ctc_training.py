@@ -13,6 +13,7 @@ parser.add_argument('-set',  dest='set', type=str, required=True, help='Path to 
 parser.add_argument('-save_model', dest='save_model', type=str, required=True, help='Path to save the model.')
 parser.add_argument('-vocabulary', dest='voc', type=str, required=True, help='Path to the vocabulary file.')
 parser.add_argument('-semantic', dest='semantic', action="store_true", default=False)
+parser.add_argument('-use_model', dest='use_model', type=str, required=False, default=None, help='Load a model from an external file, continue training')
 parser.add_argument('-save_after_ever_epoch', dest='save_after_every_epoch', action="store_true", default=False)
 parser.add_argument('-reduce_lr_on_plateau', dest='reduce_lr_on_plateau', action="store_true", default=False)
 args = parser.parse_args()
@@ -149,7 +150,11 @@ validation_dataset = (
 # # # # plt.show()
 
 # Model
-model = ctc_model.ctc_crnn(params)
+model = None
+if args.use_model:
+    model = tf.keras.models.load_model(args.use_model, custom_objects={'CTCLayer': ctc_model.CTCLayer})
+else:
+    model = ctc_model.ctc_crnn(params)
 print(model.summary())
 tf.keras.utils.plot_model(model, show_shapes=True)
 
@@ -202,6 +207,7 @@ history = model.fit(
     validation_data=validation_dataset,
     epochs=max_epochs,
     callbacks=callbacks,
+    validation_freq=50
 )
 
 print("Saving model to", args.save_model)
