@@ -6,6 +6,7 @@ import os
 import random
 import datetime
 from time import time
+import re
 
 parser = argparse.ArgumentParser(description='Train model.')
 parser.add_argument('-corpus', dest='corpus', type=str, required=True, help='Path to the corpus.')
@@ -82,7 +83,7 @@ batch_size = 16
 
 # Parameterization
 img_height = 128
-params = default_model_params(img_height,word2int.vocab_size())
+params = default_model_params(img_height,word2int.vocabulary_size())
 max_epochs = 64000
 early_stopping_patience = 20
 number_of_epochs_before_reducing_learning_rate = 8
@@ -104,8 +105,6 @@ val_idx = int(len(corpus_list) * val_split)
 training_list = corpus_list[val_idx:]
 validation_list = corpus_list[:val_idx]
 
-steps_per_epoch = len(training_list) // params['batch_size']
-
 print ('Training with ' + str(len(training_list)) + ' and validating with ' + str(len(validation_list)))
 
 start_time = time()
@@ -124,6 +123,7 @@ train_dataset = (
     })
     .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 )
+steps_per_epoch = len(training_list) // params['batch_size']
 
 validation_dataset = tf.data.Dataset.from_tensor_slices(validation_list)
 validation_dataset = (
@@ -139,6 +139,7 @@ validation_dataset = (
     })
     .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 )
+validation_steps_per_epoch = len(validation_list) // params['batch_size']
 
 # # # # _, ax = plt.subplots(2, 1, figsize=(15, 10))
 # # # # for i,batch in enumerate(train_dataset.take(2)):
@@ -151,32 +152,37 @@ validation_dataset = (
 
 # Model
 model = None
+initial_epoch=1
 if args.use_model:
     model = tf.keras.models.load_model(args.use_model, custom_objects={'CTCLayer': ctc_model.CTCLayer})
+    m = re.match('[\d-]+_ctc_model_v\d+_(\d+).h5', args.use_model)
+    if m and m.groups() and len(m.groups() == 1):
+        initial_epoch = int(m.groups()[0])+1
+    print("Model {0} loaded from checkpoint {1}. Training will resume from epoch {2}".format(
+        model.name,
+        args.use_model,
+        initial_epoch
+    ))
 else:
     model = ctc_model.ctc_crnn(params)
+    # Optimizer
+    optimizer = tf.keras.optimizers.Adam()
+    # Compile the model and return
+    model.compile(optimizer='adadelta', metrics=['accuracy'])
+
 print(model.summary())
-tf.keras.utils.plot_model(model, show_shapes=True)
-
-# Optimizer
-optimizer = tf.keras.optimizers.Adam()
-# Compile the model and return
-model.compile(optimizer=optimizer)
-
-# early_stopping = tf.keras.callbacks.EarlyStopping(
-#     monitor="val_loss", patience=early_stopping_patience, restore_best_weights=True
-# )
+#tf.keras.utils.plot_model(model, show_shapes=True)
 
 start_of_training = datetime.date.today()
 
-monitor_variable = 'val_loss'
+monitor_variable = 'val_accuracy'
 
 best_model_path = "{0}_{1}".format(start_of_training, model.name)
 if args.save_after_every_epoch:
     model_checkpoint = tf.keras.callbacks.ModelCheckpoint(best_model_path + "-{epoch:02d}.h5", monitor=monitor_variable,
             save_best_only=True, verbose=1, save_freq='epoch')
 else:
-    model_checkpoint = tf.keras.callbacks.ModelCheckpoint(best_model_path+".h5", monitor=monitor_variable,
+    model_checkpoint = tf.keras.callbacks.ModelCheckpoint(best_model_path + "-{epoch:02d}.h5", monitor=monitor_variable,
             save_best_only=True, verbose=1)
 early_stop = tf.keras.callbacks.EarlyStopping(monitor=monitor_variable,
                             patience=early_stopping_patience,
@@ -204,10 +210,13 @@ print("Training on dataset...")
 # Train the model
 history = model.fit(
     train_dataset,
+    steps_per_epoch=steps_per_epoch,
     validation_data=validation_dataset,
+    validation_steps=validation_steps_per_epoch,
     epochs=max_epochs,
+    initial_epoch=initial_epoch,
     callbacks=callbacks,
-    validation_freq=5
+    validation_freq=1
 )
 
 print("Saving model to", args.save_model)
