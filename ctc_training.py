@@ -1,4 +1,5 @@
 import tensorflow as tf
+import keras.backend as K
 import ctc_model
 import argparse
 import matplotlib.pyplot as plt
@@ -23,7 +24,7 @@ args = parser.parse_args()
 def default_model_params(img_height, vocabulary_size):
     params = dict()
     params['img_height'] = img_height
-    params['img_width'] = None  # Default image width is None?
+    params['img_width'] = None 
     params['batch_size'] = 16
     params['img_channels'] = 1
     params['conv_blocks'] = 4
@@ -36,7 +37,6 @@ def default_model_params(img_height, vocabulary_size):
     return params
 
 
-@tf.function
 def populate_data(sample_filepath):
     sample_fullpath = corpus_dirpath + os.sep + sample_filepath + os.sep + sample_filepath
 
@@ -79,7 +79,7 @@ int2word = tf.keras.layers.experimental.preprocessing.StringLookup(
 )
 
 val_split = 0.1
-batch_size = 16
+batch_size = 32
 
 # Parameterization
 img_height = 128
@@ -152,7 +152,7 @@ validation_steps_per_epoch = len(validation_list) // params['batch_size']
 
 # Model
 model = None
-initial_epoch=1
+initial_epoch=0
 if args.use_model:
     model = tf.keras.models.load_model(args.use_model, custom_objects={'CTCLayer': ctc_model.CTCLayer})
     m = re.match('[\d-]+_ctc_model_v\d+_(\d+).h5', args.use_model)
@@ -168,14 +168,14 @@ else:
     # Optimizer
     optimizer = tf.keras.optimizers.Adam()
     # Compile the model and return
-    model.compile(optimizer='adadelta', metrics=['accuracy'])
+    model.compile(optimizer=optimizer)
 
 print(model.summary())
 #tf.keras.utils.plot_model(model, show_shapes=True)
 
 start_of_training = datetime.date.today()
 
-monitor_variable = 'val_accuracy'
+monitor_variable = 'val_loss'
 
 best_model_path = "{0}_{1}".format(start_of_training, model.name)
 if args.save_after_every_epoch:
@@ -227,3 +227,7 @@ execution_time_in_seconds = round(end_time - start_time)
 print("Execution time: {0:.1f}s".format(end_time - start_time))
 
 ## Testing...
+# eval = model.evaluate(
+#     validation_dataset,
+#     metrics=['loss',CERMetric()]
+# )
