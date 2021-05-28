@@ -210,9 +210,7 @@ print("Training on dataset...")
 # Train the model
 history = model.fit(
     train_dataset,
-    steps_per_epoch=steps_per_epoch,
     validation_data=validation_dataset,
-    validation_steps=validation_steps_per_epoch,
     epochs=max_epochs,
     initial_epoch=initial_epoch,
     callbacks=callbacks,

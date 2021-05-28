@@ -56,8 +56,8 @@ class CTCLayer(tf.keras.layers.Layer):
         loss = self.loss_fn(y_true, y_pred, input_length, label_length)
         self.add_loss(loss)
 
-        acc = self.accuracy_fn(y_true, y_pred, sample_weight)
-        self.add_metric(acc, name="accuracy")
+        # acc = self.accuracy_fn(y_true, y_pred, sample_weight)
+        # self.add_metric(acc, name="accuracy")
 
         # At test time, just return the computed predictions
         return y_pred
