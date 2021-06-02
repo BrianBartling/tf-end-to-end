@@ -1,47 +1,56 @@
 import tensorflow as tf
 import keras.backend as K
 
-class CERMetric(tf.keras.metrics.Metric):
+class LARMetric(tf.keras.metrics.Metric):
     """
-    A custom Keras metric to compute the Character Error Rate
+    A custom Keras metric for computing the Label Accuracy Rate
     """
-    def __init__(self, name='CER_metric', **kwargs):
-        super(CERMetric, self).__init__(name=name, **kwargs)
-        self.cer_accumulator = self.add_weight(name="total_cer", initializer="zeros")
-        self.counter = self.add_weight(name="cer_count", initializer="zeros")
+    def __init__(self, name='Label Accuracy', **kwargs):
+        super(LARMetric, self).__init__(name=name, **kwargs)
+        self.size = self.add_weight(name="lar_size", initializer="zeros")
+        self.sum = self.add_weight(name="lar_sum", initializer="zeros")
 
     def update_state(self, y_true, y_pred, sample_weight=None):
-        input_shape = K.shape(y_pred)
-        input_length = tf.ones(shape=input_shape[0]) * tf.cast(input_shape[1], 'float32')
+        input_shape = tf.shape(y_pred)
+        input_length = tf.ones(shape=input_shape[0]) * tf.cast(input_shape[1], tf.float32)
 
-        tf.print("y_pred:", y_pred, "input_length:", input_length)
-        decode, _ = K.ctc_decode(y_pred,
-                                    input_length,
-                                    greedy=True)
-        tf.print("decode:", decode)
+        decode, _ = tf.keras.backend.ctc_decode(y_pred,
+                                                input_length,
+                                                greedy=True)
 
-        decode = K.ctc_label_dense_to_sparse(decode[0], tf.cast(input_length, 'int32'))
-        y_true_sparse = K.ctc_label_dense_to_sparse(y_true, tf.cast(input_length, 'int32'))
-
+        input_length = tf.cast(input_length, tf.int32)
+        decode = tf.keras.backend.ctc_label_dense_to_sparse(decode[0], input_length)
         decode = tf.sparse.retain(decode, tf.not_equal(decode.values, -1))
-        distance = tf.edit_distance(decode, y_true_sparse, normalize=True)
+        decode = tf.cast(decode, tf.int32)
+        y_true_sparse = tf.keras.backend.ctc_label_dense_to_sparse(y_true, input_length)
 
-        self.cer_accumulator.assign_add(tf.cast(tf.reduce_sum(distance), "float32"))
-        self.counter.assign_add(tf.cast(len(y_true), "float32"))
+        shape = tf.cond(tf.greater(tf.shape(decode), tf.shape(y_true_sparse))[1], 
+                        lambda: tf.shape(decode), lambda: tf.shape(y_true_sparse))
+
+        decode = tf.sparse.reset_shape(decode, shape)
+        y_true_sparse = tf.sparse.reset_shape(y_true_sparse, shape)
+
+        sub = tf.abs(tf.sparse.add(decode,
+                                   tf.sparse.map_values(tf.multiply, y_true_sparse, -1)))
+        sub = tf.cast(sub, tf.float32)                                   
+        sub = tf.sparse.map_values(tf.math.divide_no_nan, sub, sub)
+
+        self.size.assign_add(tf.cast(tf.size(sub), tf.float32))
+        self.sum.assign_add(tf.sparse.reduce_sum(sub))
 
     def result(self):
-        return tf.math.divide_no_nan(self.cer_accumulator, self.counter)
+        return tf.math.divide_no_nan(self.size - self.sum, self.size)
 
     def reset_state(self):
-        self.cer_accumulator.assign(0.0)
-        self.counter.assign(0.0)
+        self.size.assign(0)
+        self.sum.assign(0.0)
 
 
 class CTCLayer(tf.keras.layers.Layer):
     def __init__(self, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
         self.loss_fn = tf.keras.backend.ctc_batch_cost
-        self.accuracy_fn = CERMetric()
+        self.accuracy_fn = LARMetric()
 
     def call(self, y_true, y_pred, sample_weight=None):
         # Compute the training-time loss value and add it
@@ -56,8 +65,8 @@ class CTCLayer(tf.keras.layers.Layer):
         loss = self.loss_fn(y_true, y_pred, input_length, label_length)
         self.add_loss(loss)
 
-        # acc = self.accuracy_fn(y_true, y_pred, sample_weight)
-        # self.add_metric(acc, name="accuracy")
+        acc = self.accuracy_fn(y_true, y_pred, sample_weight)
+        self.add_metric(acc, name="accuracy")
 
         # At test time, just return the computed predictions
         return y_pred
