@@ -155,13 +155,14 @@ model = None
 initial_epoch=0
 if args.use_model:
     model = tf.keras.models.load_model(args.use_model, custom_objects={'CTCLayer': ctc_model.CTCLayer})
-    m = re.match('[\d-]+_ctc_model_v\d+_(\d+).h5', args.use_model)
-    if m and m.groups() and len(m.groups() == 1):
-        initial_epoch = int(m.groups()[0])+1
+    m = re.match('.*?[\d-]+_ctc_model_v\d+-(\d+)\.h5', args.use_model)
+    print(args.use_model, m)
+    if m and m.groups() and len(m.groups()) == 1:
+        initial_epoch = int(m.groups()[0])
     print("Model {0} loaded from checkpoint {1}. Training will resume from epoch {2}".format(
         model.name,
         args.use_model,
-        initial_epoch
+        initial_epoch+1
     ))
 else:
     model = ctc_model.ctc_crnn(params)
