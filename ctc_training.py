@@ -37,18 +37,20 @@ train_opt = tf.train.AdamOptimizer().minimize(loss)
 
 saver = tf.train.Saver(max_to_keep=None)
 sess.run(tf.global_variables_initializer())
+writer = tf.summary.FileWriter('./graphs', sess.graph)
 
 # Training loop
 for epoch in range(max_epochs):
     batch = primus.nextBatch(params)
 
-    _, loss_value = sess.run([train_opt, loss],
+    summary, loss_value = sess.run([train_opt, loss],
                              feed_dict={
                                 inputs: batch['inputs'],
                                 seq_len: batch['seq_lengths'],
                                 targets: ctc_utils.sparse_tuple_from(batch['targets']),
                                 rnn_keep_prob: dropout,
                             })
+    writer.add_summary(summary, step)
 
     if epoch % 1000 == 0:
         # VALIDATION
