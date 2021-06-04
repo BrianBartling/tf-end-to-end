@@ -50,7 +50,8 @@ for epoch in range(max_epochs):
                                 targets: ctc_utils.sparse_tuple_from(batch['targets']),
                                 rnn_keep_prob: dropout,
                             })
-    writer.add_summary(summary, step)
+    if summary is not None:
+        writer.add_summary(summary, epoch)
 
     if epoch % 1000 == 0:
         # VALIDATION
