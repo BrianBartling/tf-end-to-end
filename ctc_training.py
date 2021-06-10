@@ -119,7 +119,7 @@ train_dataset = (
         'target': [None]
     }, padding_values = {
         'model_input': 1.,
-        'target': params['vocabulary_size']+1
+        'target': tf.constant(-1, dtype=tf.int32)
     })
     .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 )
@@ -135,7 +135,7 @@ validation_dataset = (
         'target': [None]
     }, padding_values = {
         'model_input': 1.,
-        'target': params['vocabulary_size']+1
+        'target': tf.constant(-1, dtype=tf.int32)
     })
     .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 )

@@ -1,11 +1,87 @@
 import tensorflow as tf
 import keras.backend as K
 
+class SymbERMetric(tf.keras.metrics.Metric):
+    """
+    A custom Keras metric to compute the Symbol Error Rate
+    Average number of elementary editing operations needed to produce reference sequence
+    from predicted sequence
+    """
+    def __init__(self, name='Symbol_Error_Rate', **kwargs):
+        super(SymbERMetric, self).__init__(name=name, **kwargs)
+        self.symber_accumulator = self.add_weight(name="total_symber", initializer="zeros")
+        self.counter = self.add_weight(name="symber_count", initializer="zeros")
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        input_shape = K.shape(y_pred)
+        input_length = tf.ones(shape=input_shape[0]) * K.cast(input_shape[1], 'float32')
+
+        decode, log = K.ctc_decode(y_pred,
+                                    input_length,
+                                    greedy=True)
+
+        decode = K.cast(decode, 'int32')                                    
+
+        decode = K.ctc_label_dense_to_sparse(decode[0], K.cast(input_length, 'int32'))
+        y_true_sparse = K.ctc_label_dense_to_sparse(y_true, K.cast(input_length, 'int32'))
+
+        decode = tf.sparse.retain(decode, tf.not_equal(decode.values, -1))
+
+        distance = tf.edit_distance(decode, y_true_sparse, normalize=False)
+
+        self.symber_accumulator.assign_add(tf.cast(tf.reduce_sum(distance), tf.float32))
+        self.counter.assign_add(tf.cast(len(y_true), tf.float32))
+
+    def result(self):
+        return tf.math.divide_no_nan(self.symber_accumulator, self.counter)
+
+    def reset_state(self):
+        self.symber_accumulator.assign(0.0)
+        self.counter.assign(0.0)    
+
+
+class SeqERMetric(tf.keras.metrics.Metric):
+    """
+    A custom Keras metric for computing the Sequence Error Rate
+    Ratio of incorrectly prediced sequences (at least one error)
+    """
+    def __init__(self, name='Sequence_Error_Rate', **kwargs):
+        super(SeqERMetric, self).__init__(name=name, **kwargs)
+        self.size = self.add_weight(name="seqer_size", initializer="zeros")
+        self.sum = self.add_weight(name="seqer_sum", initializer="zeros")
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        input_shape = tf.shape(y_pred)
+        input_length = tf.ones(shape=input_shape[0]) * tf.cast(input_shape[1], tf.float32)
+
+        decode, _ = tf.keras.backend.ctc_decode(y_pred,
+                                                input_length,
+                                                greedy=True)
+
+        decode = tf.squeeze(decode)
+
+        decode = tf.slice(decode, [0, 0], tf.shape(y_true))                                                       
+        decode = tf.cast(decode, tf.int32)
+
+        sub = tf.cast(tf.equal(decode, y_true), tf.int32)
+        sub = tf.reduce_prod(sub, axis=1)
+
+        self.sum.assign_add(tf.cast(input_shape[0] - tf.reduce_sum(sub), tf.float32))
+        self.size.assign_add(tf.cast(input_shape[0], tf.float32))
+
+    def result(self):
+        return tf.math.divide_no_nan(self.sum, self.size)
+
+    def reset_state(self):
+        self.size.assign(0)
+        self.sum.assign(0.0)
+
+
 class LARMetric(tf.keras.metrics.Metric):
     """
     A custom Keras metric for computing the Label Accuracy Rate
     """
-    def __init__(self, name='Label Accuracy', **kwargs):
+    def __init__(self, name='Label_Accuracy_Rate', **kwargs):
         super(LARMetric, self).__init__(name=name, **kwargs)
         self.size = self.add_weight(name="lar_size", initializer="zeros")
         self.sum = self.add_weight(name="lar_sum", initializer="zeros")
@@ -18,28 +94,20 @@ class LARMetric(tf.keras.metrics.Metric):
                                                 input_length,
                                                 greedy=True)
 
-        input_length = tf.cast(input_length, tf.int32)
-        decode = tf.keras.backend.ctc_label_dense_to_sparse(decode[0], input_length)
-        decode = tf.sparse.retain(decode, tf.not_equal(decode.values, -1))
+        decode = tf.squeeze(decode)
+
+        decode = tf.slice(decode, [0, 0], tf.shape(y_true))                                                       
         decode = tf.cast(decode, tf.int32)
-        y_true_sparse = tf.keras.backend.ctc_label_dense_to_sparse(y_true, input_length)
 
-        shape = tf.cond(tf.greater(tf.shape(decode), tf.shape(y_true_sparse))[1], 
-                        lambda: tf.shape(decode), lambda: tf.shape(y_true_sparse))
+        num_pad = tf.reduce_sum(tf.cast(decode == -1, tf.int32))
+        sub = tf.cast(y_true == decode, tf.int32)
+        sub = tf.maximum(tf.reduce_sum(sub) - num_pad, 0)
 
-        decode = tf.sparse.reset_shape(decode, shape)
-        y_true_sparse = tf.sparse.reset_shape(y_true_sparse, shape)
-
-        sub = tf.abs(tf.sparse.add(decode,
-                                   tf.sparse.map_values(tf.multiply, y_true_sparse, -1)))
-        sub = tf.cast(sub, tf.float32)                                   
-        sub = tf.sparse.map_values(tf.math.divide_no_nan, sub, sub)
-
-        self.size.assign_add(tf.cast(tf.size(sub), tf.float32))
-        self.sum.assign_add(tf.sparse.reduce_sum(sub))
+        self.sum.assign_add(tf.cast(sub, tf.float32))
+        self.size.assign_add(tf.cast(tf.size(sub) - num_pad, tf.float32))
 
     def result(self):
-        return tf.math.divide_no_nan(self.size - self.sum, self.size)
+        return tf.math.divide_no_nan(self.sum, self.size)
 
     def reset_state(self):
         self.size.assign(0)
@@ -50,7 +118,9 @@ class CTCLayer(tf.keras.layers.Layer):
     def __init__(self, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
         self.loss_fn = tf.keras.backend.ctc_batch_cost
-        self.accuracy_fn = LARMetric()
+        self.lar_fn = LARMetric()
+        self.symber_fn = SymbERMetric()
+        self.seqer_fn = SeqERMetric()
 
     def call(self, y_true, y_pred, sample_weight=None):
         # Compute the training-time loss value and add it
@@ -60,13 +130,22 @@ class CTCLayer(tf.keras.layers.Layer):
         label_length = tf.cast(tf.shape(y_true)[1], dtype="int32")
 
         input_length = input_length * tf.ones(shape=(batch_len, 1), dtype="int32")
-        label_length = label_length * tf.ones(shape=(batch_len, 1), dtype="int32")
+
+        label_length = tf.cast(y_true != tf.constant(-1), tf.int32)
+        label_length = tf.reduce_sum(label_length, axis=1)
+        label_length = tf.expand_dims(label_length, axis=1)
 
         loss = self.loss_fn(y_true, y_pred, input_length, label_length)
         self.add_loss(loss)
 
-        acc = self.accuracy_fn(y_true, y_pred, sample_weight)
-        self.add_metric(acc, name="accuracy")
+        lar = self.lar_fn(y_true, y_pred, sample_weight)
+        self.add_metric(lar, name="Label_Accuracy_Rate")
+
+        symber = self.symber_fn(y_true, y_pred, sample_weight)
+        self.add_metric(symber, name="Symbol_Error_Rate")
+
+        seqer = self.seqer_fn(y_true, y_pred, sample_weight)
+        self.add_metric(seqer, name="Sequence_Error_Rate")
 
         # At test time, just return the computed predictions
         return y_pred
@@ -123,23 +202,23 @@ def ctc_crnn(params):
     rnn_hidden_units = params['rnn_units']
     rnn_hidden_layers = params['rnn_layers']
 
-    features = tf.keras.layers.Dense(64, activation="relu", name="dense1")(features)
-    features = tf.keras.layers.Dropout(0.2)(features)
+    # features = tf.keras.layers.Dense(64, activation="relu", name="dense1")(features)
+    # features = tf.keras.layers.Dropout(0.2)(features)
 
-    # forward_layer = tf.keras.layers.StackedRNNCells([tf.keras.layers.LSTMCell(rnn_hidden_units) for _ in range(rnn_hidden_layers)])
-    # forward_layer = tf.keras.layers.RNN(forward_layer, return_sequences=True)
-    # backward_layer = tf.keras.layers.StackedRNNCells([tf.keras.layers.LSTMCell(rnn_hidden_units) for _ in range(rnn_hidden_layers)])
-    # backward_layer = tf.keras.layers.RNN(backward_layer, return_sequences = True, go_backwards=True)
+    forward_layer = tf.keras.layers.StackedRNNCells([tf.keras.layers.LSTMCell(rnn_hidden_units) for _ in range(rnn_hidden_layers)])
+    forward_layer = tf.keras.layers.RNN(forward_layer, return_sequences=True)
+    backward_layer = tf.keras.layers.StackedRNNCells([tf.keras.layers.LSTMCell(rnn_hidden_units) for _ in range(rnn_hidden_layers)])
+    backward_layer = tf.keras.layers.RNN(backward_layer, return_sequences = True, go_backwards=True)
 
-    # rnn_outputs = tf.keras.layers.Bidirectional(forward_layer,
-    #                                             backward_layer = backward_layer,
-    #                                             dtype=tf.float32)(features)
+    rnn_outputs = tf.keras.layers.Bidirectional(forward_layer,
+                                                backward_layer = backward_layer,
+                                                dtype=tf.float32)(features)
 
-    rnn_outputs = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128, return_sequences=True, dropout=0.25))(features)
-    rnn_outputs = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128, return_sequences=True, dropout=0.25))(rnn_outputs)
-    rnn_outputs = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128, return_sequences=True, dropout=0.25))(rnn_outputs)
+    # rnn_outputs = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128, return_sequences=True, dropout=0.25))(features)
+    # rnn_outputs = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128, return_sequences=True, dropout=0.25))(rnn_outputs)
+    # rnn_outputs = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128, return_sequences=True, dropout=0.25))(rnn_outputs)
 
-    logits = tf.keras.layers.Dense(params['vocabulary_size']+2, activation="softmax", name="dense2")(rnn_outputs)
+    logits = tf.keras.layers.Dense(params['vocabulary_size']+1, activation="softmax", name="dense2")(rnn_outputs)
 
     # CTC Loss computation
     output = CTCLayer(name="ctc_loss")(targets, logits)
