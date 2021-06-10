@@ -102,9 +102,9 @@ class LARMetric(tf.keras.metrics.Metric):
         num_pad = tf.reduce_sum(tf.cast(decode == -1, tf.int32))
         sub = tf.cast(y_true == decode, tf.int32)
         sub = tf.maximum(tf.reduce_sum(sub) - num_pad, 0)
-
+        
         self.sum.assign_add(tf.cast(sub, tf.float32))
-        self.size.assign_add(tf.cast(tf.size(sub) - num_pad, tf.float32))
+        self.size.assign_add(tf.cast(tf.size(y_true) - num_pad, tf.float32))
 
     def result(self):
         return tf.math.divide_no_nan(self.sum, self.size)
