@@ -1,6 +1,7 @@
 import tensorflow as tf
 import keras.backend as K
 import ctc_model
+from ctc_model import SymbERMetric, LARMetric, SeqERMetric
 import argparse
 import matplotlib.pyplot as plt
 import os
@@ -79,7 +80,7 @@ int2word = tf.keras.layers.experimental.preprocessing.StringLookup(
 )
 
 val_split = 0.1
-batch_size = 32
+batch_size = 16
 
 # Parameterization
 img_height = 128
@@ -169,7 +170,7 @@ else:
     # Optimizer
     optimizer = tf.keras.optimizers.Adam()
     # Compile the model and return
-    model.compile(optimizer=optimizer)
+    model.compile(optimizer=optimizer, metrics=[LARMetric(), SymbERMetric(), SeqERMetric()])
 
 print(model.summary())
 #tf.keras.utils.plot_model(model, show_shapes=True)
@@ -207,6 +208,8 @@ else:
 ## Should we calculate class weights?
 
 print("Training on dataset...")
+
+print("metric names:", model.metrics_names)
 
 # Train the model
 history = model.fit(
