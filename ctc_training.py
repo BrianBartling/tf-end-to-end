@@ -85,7 +85,7 @@ batch_size = 32
 img_height = 128
 params = default_model_params(img_height,word2int.vocabulary_size())
 max_epochs = 64000
-early_stopping_patience = 100
+early_stopping_patience = 50
 number_of_epochs_before_reducing_learning_rate = 8
 learning_rate_reduction_factor = 0.5
 minimum_learning_rate = 0.00001
@@ -176,7 +176,7 @@ print(model.summary())
 
 start_of_training = datetime.date.today()
 
-monitor_variable = 'val_loss'
+monitor_variable = 'val_Label_Accuracy_Rate'
 
 best_model_path = "{0}_{1}".format(start_of_training, model.name)
 if args.save_after_every_epoch:

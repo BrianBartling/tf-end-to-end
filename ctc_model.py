@@ -119,8 +119,8 @@ class CTCLayer(tf.keras.layers.Layer):
         super().__init__(name=name, **kwargs)
         self.loss_fn = tf.keras.backend.ctc_batch_cost
         self.lar_fn = LARMetric()
-        self.symber_fn = SymbERMetric()
         self.seqer_fn = SeqERMetric()
+        self.symber_fn = SymbERMetric()
 
     def call(self, y_true, y_pred, sample_weight=None):
         # Compute the training-time loss value and add it
@@ -141,11 +141,11 @@ class CTCLayer(tf.keras.layers.Layer):
         lar = self.lar_fn(y_true, y_pred, sample_weight)
         self.add_metric(lar, name="Label_Accuracy_Rate")
 
-        symber = self.symber_fn(y_true, y_pred, sample_weight)
-        self.add_metric(symber, name="Symbol_Error_Rate")
-
         seqer = self.seqer_fn(y_true, y_pred, sample_weight)
         self.add_metric(seqer, name="Sequence_Error_Rate")
+
+        symber = self.symber_fn(y_true, y_pred, sample_weight)
+        self.add_metric(symber, name="Symbol_Error_Rate")
 
         # At test time, just return the computed predictions
         return y_pred
