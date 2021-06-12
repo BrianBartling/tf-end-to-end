@@ -126,9 +126,8 @@ class CTCLayer(tf.keras.layers.Layer):
         # Compute the training-time loss value and add it
         # to the layer using `self.add_loss()`.
         batch_len = tf.cast(tf.shape(y_true)[0], dtype="int32")
-        input_length = tf.cast(tf.shape(y_pred)[1], dtype="int32")
-        label_length = tf.cast(tf.shape(y_true)[1], dtype="int32")
 
+        input_length = tf.cast(tf.shape(y_pred)[1], dtype="int32")
         input_length = input_length * tf.ones(shape=(batch_len, 1), dtype="int32")
 
         label_length = tf.cast(y_true != tf.constant(-1), tf.int32)
@@ -139,13 +138,13 @@ class CTCLayer(tf.keras.layers.Layer):
         self.add_loss(loss)
 
         lar = self.lar_fn(y_true, y_pred, sample_weight)
-        self.add_metric(lar, name="Label_Accuracy_Rate")
+        self.add_metric(lar)
 
         seqer = self.seqer_fn(y_true, y_pred, sample_weight)
-        self.add_metric(seqer, name="Sequence_Error_Rate")
+        self.add_metric(seqer)
 
         symber = self.symber_fn(y_true, y_pred, sample_weight)
-        self.add_metric(symber, name="Symbol_Error_Rate")
+        self.add_metric(symber)
 
         # At test time, just return the computed predictions
         return y_pred

@@ -9,6 +9,7 @@ import random
 import datetime
 from time import time
 import re
+import shutil
 
 parser = argparse.ArgumentParser(description='Train model.')
 parser.add_argument('-corpus', dest='corpus', type=str, required=True, help='Path to the corpus.')
@@ -19,6 +20,8 @@ parser.add_argument('-semantic', dest='semantic', action="store_true", default=F
 parser.add_argument('-use_model', dest='use_model', type=str, required=False, default=None, help='Load a model from an external file, continue training')
 parser.add_argument('-save_after_ever_epoch', dest='save_after_every_epoch', action="store_true", default=False)
 parser.add_argument('-reduce_lr_on_plateau', dest='reduce_lr_on_plateau', action="store_true", default=False)
+parser.add_argument('-copy_to_dest', dest='copy_to_dest', action="store_true", default=False)
+parser.add_argument('-copy_source', dest='copy_source', type=str, required=False, default='/content/drive/MyDrive/Colab Notebooks/OMR/weights/', help='Source destination to copy to.')
 args = parser.parse_args()
 
 
@@ -198,6 +201,13 @@ learning_rate_reduction = tf.keras.callbacks.ReduceLROnPlateau(monitor=monitor_v
 tensorboard_callback = tf.keras.callbacks.TensorBoard(
         log_dir="./logs/{0}_{1}/".format(start_of_training, model.name))
 
+
+class CopyModelWeights(tf.keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        filename = best_model_path + "-{epoch:02d}.h5"
+        shutil.copyfile(filename, args.copy_source + os.sep + filename)
+
+
 callbacks = [model_checkpoint, early_stop, tensorboard_callback]
 
 if args.reduce_lr_on_plateau:
@@ -205,11 +215,31 @@ if args.reduce_lr_on_plateau:
 else:
     print("Learning-rate reduction on Plateau disabled")
 
+if args.copy_to_dest:
+    callbacks.append(CopyModelWeights())    
+
 ## Should we calculate class weights?
 
 print("Training on dataset...")
 
 print("metric names:", model.metrics_names)
+
+# for ex_dict in train_dataset.take(1):
+#     y_true = ex_dict['target']
+#     print("y_true:", y_true)
+#     example_batch_predictions = model(ex_dict)
+#     print(example_batch_predictions.shape, "# (batch_size, sequence_length, vocab_size)")
+
+#     batch_len = tf.cast(tf.shape(y_true)[0], dtype="int32")
+#     input_length = tf.cast(tf.shape(example_batch_predictions)[1], dtype="int32")
+#     input_length = input_length * tf.ones(shape=(batch_len, 1), dtype="int32")
+#     label_length = tf.cast(y_true != tf.constant(-1), tf.int32)
+#     label_length = tf.reduce_sum(label_length, axis=1)
+#     label_length = tf.expand_dims(label_length, axis=1)
+#     example_batch_loss = tf.keras.backend.ctc_batch_cost(y_true, example_batch_predictions, input_length, label_length)
+#     print(example_batch_loss)
+#     mean_loss = example_batch_loss.numpy().mean()
+#     print("mean loss:", mean_loss)
 
 # Train the model
 history = model.fit(
