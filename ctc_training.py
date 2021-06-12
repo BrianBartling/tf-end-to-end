@@ -205,6 +205,7 @@ tensorboard_callback = tf.keras.callbacks.TensorBoard(
 class CopyModelWeights(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         filename = best_model_path + "-{epoch:02d}.h5"
+        print(f"Copying '{filename}'' to source dir: '{args.copy_source}'")
         shutil.copyfile(filename, args.copy_source + os.sep + filename)
 
 
