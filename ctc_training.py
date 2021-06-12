@@ -170,14 +170,14 @@ else:
     # Optimizer
     optimizer = tf.keras.optimizers.Adam()
     # Compile the model and return
-    model.compile(optimizer=optimizer, metrics=[LARMetric(), SymbERMetric(), SeqERMetric()])
+    model.compile(optimizer=optimizer)
 
 print(model.summary())
 #tf.keras.utils.plot_model(model, show_shapes=True)
 
 start_of_training = datetime.date.today()
 
-monitor_variable = 'val_Label_Accuracy_Rate'
+monitor_variable = 'val_loss'
 
 best_model_path = "{0}_{1}".format(start_of_training, model.name)
 if args.save_after_every_epoch:
