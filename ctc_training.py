@@ -29,7 +29,7 @@ def default_model_params(img_height, vocabulary_size):
     params = dict()
     params['img_height'] = img_height
     params['img_width'] = None 
-    params['batch_size'] = 32
+    params['batch_size'] = 16
     params['img_channels'] = 1
     params['conv_blocks'] = 4
     params['conv_filter_n'] = [32, 64, 128, 256]
@@ -82,12 +82,11 @@ int2word = tf.keras.layers.experimental.preprocessing.StringLookup(
     vocabulary=word2int.get_vocabulary(), mask_token=None, invert=True
 )
 
-val_split = 0.1
-batch_size = 32
-
 # Parameterization
-img_height = 64
+img_height = 128
 params = default_model_params(img_height,word2int.vocabulary_size())
+val_split = 0.1
+batch_size = params['batch_size']
 max_epochs = 64000
 early_stopping_patience = 50
 number_of_epochs_before_reducing_learning_rate = 8
