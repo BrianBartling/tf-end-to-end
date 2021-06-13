@@ -112,46 +112,85 @@ print ('Training with ' + str(len(training_list)) + ' and validating with ' + st
 
 start_time = time()
 
+## Make buckets based on image widths
+boundaries =  [512, 1024, 2048, 4096]
+batch_sizes = [64,    32,   16,    8,  4]
+
 train_dataset = tf.data.Dataset.from_tensor_slices(training_list)
 train_dataset = (
     train_dataset.map(
         populate_data, num_parallel_calls=tf.data.experimental.AUTOTUNE
     )
-    .padded_batch(batch_size, padded_shapes = {
-        'model_input': [img_height, None, 1],
-        'target': [None]
-    }, padding_values = {
-        'model_input': 1.,
-        'target': tf.constant(-1, dtype=tf.int32)
-    })
+    # .padded_batch(batch_size, padded_shapes = {
+    #     'model_input': [img_height, None, 1],
+    #     'target': [None]
+    # }, padding_values = {
+    #     'model_input': 1.,
+    #     'target': tf.constant(-1, dtype=tf.int32)
+    # })
+    .apply(
+        tf.data.experimental.bucket_by_sequence_length(
+            element_length_func=lambda elem: tf.shape(elem['model_input'])[1],
+            bucket_boundaries=boundaries,
+            bucket_batch_sizes=batch_sizes,
+            padded_shapes = {
+                'model_input': [img_height, None, 1],
+                'target': [None]
+            }, padding_values = {
+                'model_input': 1.,
+                'target': tf.constant(-1, dtype=tf.int32)
+            }
+        )
+    )
     .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 )
-#steps_per_epoch = len(training_list) // params['batch_size']
+steps_per_epoch = len(training_list) // params['batch_size']
 
 validation_dataset = tf.data.Dataset.from_tensor_slices(validation_list)
 validation_dataset = (
     validation_dataset.map(
         populate_data, num_parallel_calls=tf.data.experimental.AUTOTUNE
     )
-    .padded_batch(batch_size, padded_shapes = {
-        'model_input': [img_height, None, 1],
-        'target': [None]
-    }, padding_values = {
-        'model_input': 1.,
-        'target': tf.constant(-1, dtype=tf.int32)
-    })
+    # .padded_batch(batch_size, padded_shapes = {
+    #     'model_input': [img_height, None, 1],
+    #     'target': [None]
+    # }, padding_values = {
+    #     'model_input': 1.,
+    #     'target': tf.constant(-1, dtype=tf.int32)
+    # })
+    .apply(
+        tf.data.experimental.bucket_by_sequence_length(
+            element_length_func=lambda elem: tf.shape(elem['model_input'])[1],
+            bucket_boundaries=boundaries,
+            bucket_batch_sizes=batch_sizes,
+            padded_shapes = {
+                'model_input': [img_height, None, 1],
+                'target': [None]
+            }, padding_values = {
+                'model_input': 1.,
+                'target': tf.constant(-1, dtype=tf.int32)
+            }
+        )
+    )
     .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 )
-#validation_steps_per_epoch = len(validation_list) // params['batch_size']
 
-# # # # _, ax = plt.subplots(2, 1, figsize=(15, 10))
-# # # # for i,batch in enumerate(train_dataset.take(2)):
-# # # #     image = batch["x"]
-# # # #     label = batch["y"]
-# # # #     ax[i].imshow(np.squeeze(batch['x'], axis=0), cmap="gray")
-# # # #     ax[i].set_title(str(int2word(label).numpy()))
-# # # #     ax[i].axis("off")
-# # # # plt.show()
+
+# for i in train_dataset.take(50):
+#     tf.print(tf.shape(i['model_input']), tf.shape(i['target']))
+#     tf.print(i['target'], summarize=6)
+#     tf.print()
+
+validation_steps_per_epoch = len(validation_list) // params['batch_size']
+
+# # # # # _, ax = plt.subplots(2, 1, figsize=(15, 10))
+# # # # # for i,batch in enumerate(train_dataset.take(2)):
+# # # # #     image = batch["x"]
+# # # # #     label = batch["y"]
+# # # # #     ax[i].imshow(np.squeeze(batch['x'], axis=0), cmap="gray")
+# # # # #     ax[i].set_title(str(int2word(label).numpy()))
+# # # # #     ax[i].axis("off")
+# # # # # plt.show()
 
 # Model
 model = None
@@ -254,7 +293,9 @@ history = model.fit(
     epochs=max_epochs,
     initial_epoch=initial_epoch,
     callbacks=callbacks,
-    validation_freq=1
+    validation_freq=1,
+    steps_per_epoch=steps_per_epoch,
+    validation_steps=validation_steps_per_epoch
 )
 
 print("Saving model to", args.save_model)
