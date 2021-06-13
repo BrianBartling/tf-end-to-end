@@ -90,7 +90,7 @@ batch_size = params['batch_size']
 max_epochs = 64000
 early_stopping_patience = 50
 number_of_epochs_before_reducing_learning_rate = 8
-learning_rate_reduction_factor = 0.5
+learning_rate_reduction_factor = 0.2
 minimum_learning_rate = 0.00001
 
 semantic = args.semantic
