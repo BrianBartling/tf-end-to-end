@@ -205,8 +205,11 @@ tensorboard_callback = tf.keras.callbacks.TensorBoard(
 class CopyModelWeights(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         filename = best_model_path + f"-{epoch+1:02d}.h5"
-        print(f"Copying '{filename}'' to source dir: '{args.copy_source}'")
-        shutil.copyfile(filename, args.copy_source + os.sep + filename)
+        source_dir = args.copy_source + os.sep + best_model_path
+        if not os.path.isdir(source_dir):
+            os.mkdir(source_dir)
+        print(f"Copying '{filename}'' to source dir: '{source_dir}'")
+        shutil.copyfile(filename, source_dir + os.sep + filename)
 
 
 callbacks = [model_checkpoint, early_stop, tensorboard_callback]
@@ -217,6 +220,8 @@ else:
     print("Learning-rate reduction on Plateau disabled")
 
 if args.copy_to_dest:
+    if not os.path.isdir(args.copy_source):
+        raise Exception(f"'{args.copy_source}' does not exist!")
     callbacks.append(CopyModelWeights())    
 
 ## Should we calculate class weights?

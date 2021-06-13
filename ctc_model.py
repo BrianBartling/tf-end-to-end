@@ -79,9 +79,12 @@ class SeqERMetric(tf.keras.metrics.Metric):
 
 class LARMetric(tf.keras.metrics.Metric):
     """
-    A custom Keras metric for computing the Label Accuracy Rate
+    A custom Keras metric for computing the Label Accuracy Recall
+    -- Divides the sum of overlapping unigrams in model
+    & reference by the total # of words in the reference
+    -- Measures how much of the reference image the system is capturing
     """
-    def __init__(self, name='Label_Accuracy_Rate', **kwargs):
+    def __init__(self, name='Label_Accuracy_Recall', **kwargs):
         super(LARMetric, self).__init__(name=name, **kwargs)
         self.size = self.add_weight(name="lar_size", initializer="zeros")
         self.sum = self.add_weight(name="lar_sum", initializer="zeros")
@@ -114,11 +117,52 @@ class LARMetric(tf.keras.metrics.Metric):
         self.sum.assign(0.0)
 
 
+class LAPMetric(tf.keras.metrics.Metric):
+    """
+    A custom Keras metric for computing the Label Accuracy Precision
+    -- Divides the sum of overlapping unigrams in model
+    & reference by the total # of words in the model
+    -- Measures how much of the output of the model was relevant
+    """
+    def __init__(self, name='Label_Accuracy_Precision', **kwargs):
+        super(LAPMetric, self).__init__(name=name, **kwargs)
+        self.size = self.add_weight(name="lap_size", initializer="zeros")
+        self.sum = self.add_weight(name="lap_sum", initializer="zeros")
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        input_shape = tf.shape(y_pred)
+        input_length = tf.ones(shape=input_shape[0]) * tf.cast(input_shape[1], tf.float32)
+
+        decode, _ = tf.keras.backend.ctc_decode(y_pred,
+                                                input_length,
+                                                greedy=True)
+
+        decode = tf.squeeze(decode)
+
+        decode = tf.slice(decode, [0, 0], tf.shape(y_true))                                                       
+        decode = tf.cast(decode, tf.int32)
+
+        num_pad = tf.reduce_sum(tf.cast(decode == -1, tf.int32))
+        sub = tf.cast(y_true == decode, tf.int32)
+        sub = tf.maximum(tf.reduce_sum(sub) - num_pad, 0)
+
+        self.sum.assign_add(tf.cast(sub, tf.float32))
+        self.size.assign_add(tf.cast(tf.size(y_pred) - num_pad, tf.float32))
+
+    def result(self):
+        return tf.math.divide_no_nan(self.sum, self.size)
+
+    def reset_state(self):
+        self.size.assign(0)
+        self.sum.assign(0.0)
+
+
 class CTCLayer(tf.keras.layers.Layer):
     def __init__(self, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
         self.loss_fn = tf.keras.backend.ctc_batch_cost
         self.lar_fn = LARMetric()
+        self.lap_fn = LAPMetric()
         self.seqer_fn = SeqERMetric()
         self.symber_fn = SymbERMetric()
 
@@ -139,6 +183,9 @@ class CTCLayer(tf.keras.layers.Layer):
 
         lar = self.lar_fn(y_true, y_pred, sample_weight)
         self.add_metric(lar)
+
+        lap = self.lap_fn(y_true, y_pred, sample_weight)
+        self.add_metric(lap)
 
         seqer = self.seqer_fn(y_true, y_pred, sample_weight)
         self.add_metric(seqer)
