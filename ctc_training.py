@@ -41,6 +41,16 @@ def default_model_params(img_height, vocabulary_size):
     return params
 
 
+def reduce_dims(input_dict):
+    model_input = input_dict['model_input']
+    target = input_dict['target']
+
+    tf.print("Model input shape:", tf.shape(model_input))
+    tf.print("Target shape:", tf.shape(target))
+
+    return input_dict
+
+
 def populate_data(sample_filepath):
     sample_fullpath = corpus_dirpath + os.sep + sample_filepath + os.sep + sample_filepath
 
@@ -83,10 +93,10 @@ int2word = tf.keras.layers.experimental.preprocessing.StringLookup(
 )
 
 val_split = 0.1
-batch_size = 16
+batch_size = 32
 
 # Parameterization
-img_height = 128
+img_height = 64
 params = default_model_params(img_height,word2int.vocabulary_size())
 max_epochs = 64000
 early_stopping_patience = 50
@@ -125,9 +135,12 @@ train_dataset = (
         'model_input': 1.,
         'target': tf.constant(-1, dtype=tf.int32)
     })
+    .map(
+        reduce_dims, num_parallel_calls=tf.data.experimental.AUTOTUNE
+    )
     .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 )
-steps_per_epoch = len(training_list) // params['batch_size']
+#steps_per_epoch = len(training_list) // params['batch_size']
 
 validation_dataset = tf.data.Dataset.from_tensor_slices(validation_list)
 validation_dataset = (
@@ -143,7 +156,7 @@ validation_dataset = (
     })
     .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 )
-validation_steps_per_epoch = len(validation_list) // params['batch_size']
+#validation_steps_per_epoch = len(validation_list) // params['batch_size']
 
 # # # # _, ax = plt.subplots(2, 1, figsize=(15, 10))
 # # # # for i,batch in enumerate(train_dataset.take(2)):
