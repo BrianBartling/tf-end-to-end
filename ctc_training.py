@@ -18,7 +18,7 @@ parser.add_argument('-save_model', dest='save_model', type=str, required=True, h
 parser.add_argument('-vocabulary', dest='voc', type=str, required=True, help='Path to the vocabulary file.')
 parser.add_argument('-semantic', dest='semantic', action="store_true", default=False)
 parser.add_argument('-use_model', dest='use_model', type=str, required=False, default=None, help='Load a model from an external file, continue training')
-parser.add_argument('-save_after_ever_epoch', dest='save_after_every_epoch', action="store_true", default=False)
+parser.add_argument('-save_after_every_epoch', dest='save_after_every_epoch', action="store_true", default=False)
 parser.add_argument('-reduce_lr_on_plateau', dest='reduce_lr_on_plateau', action="store_true", default=False)
 parser.add_argument('-copy_to_dest', dest='copy_to_dest', action="store_true", default=False)
 parser.add_argument('-copy_source', dest='copy_source', type=str, required=False, default='/content/drive/MyDrive/Colab Notebooks/OMR/weights/', help='Source destination to copy to.')
@@ -204,7 +204,7 @@ tensorboard_callback = tf.keras.callbacks.TensorBoard(
 
 class CopyModelWeights(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
-        filename = best_model_path + "-{epoch:02d}.h5"
+        filename = best_model_path + f"-{epoch:02d}.h5"
         print(f"Copying '{filename}'' to source dir: '{args.copy_source}'")
         shutil.copyfile(filename, args.copy_source + os.sep + filename)
 
