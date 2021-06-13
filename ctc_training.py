@@ -41,16 +41,6 @@ def default_model_params(img_height, vocabulary_size):
     return params
 
 
-def reduce_dims(input_dict):
-    model_input = input_dict['model_input']
-    target = input_dict['target']
-
-    tf.print("Model input shape:", tf.shape(model_input))
-    tf.print("Target shape:", tf.shape(target))
-
-    return input_dict
-
-
 def populate_data(sample_filepath):
     sample_fullpath = corpus_dirpath + os.sep + sample_filepath + os.sep + sample_filepath
 
@@ -135,9 +125,6 @@ train_dataset = (
         'model_input': 1.,
         'target': tf.constant(-1, dtype=tf.int32)
     })
-    .map(
-        reduce_dims, num_parallel_calls=tf.data.experimental.AUTOTUNE
-    )
     .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 )
 #steps_per_epoch = len(training_list) // params['batch_size']
