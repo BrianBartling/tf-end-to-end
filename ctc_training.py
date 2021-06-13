@@ -207,8 +207,9 @@ class CopyModelWeights(tf.keras.callbacks.Callback):
         source_dir = args.copy_source + os.sep + best_model_path
         if not os.path.isdir(source_dir):
             os.mkdir(source_dir)
-        print(f"Copying '{filename}'' to source dir: '{source_dir}'")
-        shutil.copyfile(filename, source_dir + os.sep + filename)
+        if os.path.isfile(filename):
+            print(f"Copying '{filename}'' to source dir: '{source_dir}'")
+            shutil.copyfile(filename, source_dir + os.sep + filename)
 
 
 callbacks = [model_checkpoint, early_stop, tensorboard_callback]
