@@ -294,8 +294,8 @@ history = model.fit(
     initial_epoch=initial_epoch,
     callbacks=callbacks,
     validation_freq=1,
-    steps_per_epoch=steps_per_epoch,
-    validation_steps=validation_steps_per_epoch
+    #steps_per_epoch=steps_per_epoch,
+    #validation_steps=validation_steps_per_epoch
 )
 
 print("Saving model to", args.save_model)

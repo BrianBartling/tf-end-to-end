@@ -97,7 +97,10 @@ class LARMetric(tf.keras.metrics.Metric):
                                                 input_length,
                                                 greedy=True)
 
-        decode = tf.squeeze(decode)
+        if len(tf.shape(decode)) == len(tf.shape(y_true))+1:
+            decode = tf.squeeze(decode)
+        else:
+            tf.print("Decode:", decode, tf.shape(decode))
 
         decode = tf.slice(decode, [0, 0], tf.shape(y_true))                                                       
         decode = tf.cast(decode, tf.int32)
