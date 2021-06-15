@@ -254,21 +254,26 @@ def ctc_crnn(params):
     # features = tf.keras.layers.Dense(64, activation="relu", name="dense1")(features)
     # features = tf.keras.layers.Dropout(0.2)(features)
 
-    forward_layer = tf.keras.layers.StackedRNNCells([tf.keras.layers.LSTMCell(rnn_hidden_units,
-                                                                                dropout=params['dropout_rate'],
-                                                                                recurrent_dropout=params['dropout_rate'])
-                                                     for _ in range(rnn_hidden_layers)])
-    forward_layer = tf.keras.layers.RNN(forward_layer, return_sequences=True)
-    backward_layer = tf.keras.layers.StackedRNNCells([tf.keras.layers.LSTMCell(rnn_hidden_units,
-                                                                                dropout=params['dropout_rate'],
-                                                                                recurrent_dropout=params['dropout_rate'])
-                                                     for _ in range(rnn_hidden_layers)])
+    # forward_layer = tf.keras.layers.StackedRNNCells([tf.keras.layers.LSTMCell(rnn_hidden_units,
+    #                                                                             dropout=params['dropout_rate'],
+    #                                                                             recurrent_dropout=params['dropout_rate'])
+    #                                                  for _ in range(rnn_hidden_layers)])
+    # forward_layer = tf.keras.layers.RNN(forward_layer, return_sequences=True)
+    # backward_layer = tf.keras.layers.StackedRNNCells([tf.keras.layers.LSTMCell(rnn_hidden_units,
+    #                                                                             dropout=params['dropout_rate'],
+    #                                                                             recurrent_dropout=params['dropout_rate'])
+    #                                                  for _ in range(rnn_hidden_layers)])
 
-    backward_layer = tf.keras.layers.RNN(backward_layer, return_sequences = True, go_backwards=True)
+    # backward_layer = tf.keras.layers.RNN(backward_layer, return_sequences = True, go_backwards=True)
 
-    rnn_outputs = tf.keras.layers.Bidirectional(forward_layer,
-                                                backward_layer = backward_layer,
-                                                dtype=tf.float32)(features)
+    # rnn_outputs = tf.keras.layers.Bidirectional(forward_layer,
+    #                                             backward_layer = backward_layer,
+    #                                             dtype=tf.float32)(features)
+
+    forward_layer = tf.keras.layers.LSTM(params['rnn_units'], return_sequences=True, dropout=params['dropout_rate'])
+    backward_layer = tf.keras.layers.LSTM(params['rnn_units'], activation='relu', return_sequences=True, go_backwards=True,
+                                            dropout=params['dropout_rate'])
+    rnn_outputs = tf.keras.layers.Bidirectional(forward_layer, backward_layer = backward_layer, dtype=tf.float32)(features)                                            
 
     # rnn_outputs = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128, return_sequences=True, dropout=0.25))(features)
     # rnn_outputs = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128, return_sequences=True, dropout=0.25))(rnn_outputs)
