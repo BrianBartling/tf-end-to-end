@@ -222,8 +222,9 @@ monitor_variable = 'val_loss'
 
 best_model_path = "{0}_{1}".format(start_of_training, model.name)
 if args.save_after_every_epoch:
+    print("Saving after every epoch")
     model_checkpoint = tf.keras.callbacks.ModelCheckpoint(best_model_path + "-{epoch:02d}.h5", monitor=monitor_variable,
-            save_best_only=True, verbose=1, save_freq='epoch')
+            save_best_only=False, verbose=1, save_freq='epoch')
 else:
     model_checkpoint = tf.keras.callbacks.ModelCheckpoint(best_model_path + "-{epoch:02d}.h5", monitor=monitor_variable,
             save_best_only=True, verbose=1)
