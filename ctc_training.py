@@ -38,6 +38,7 @@ def default_model_params(img_height, vocabulary_size):
     params['rnn_units'] = 256
     params['rnn_layers'] = 2
     params['vocabulary_size'] = vocabulary_size
+    params['dropout_rate'] = 0.5
     return params
 
 
