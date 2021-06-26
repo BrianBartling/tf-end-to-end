@@ -89,7 +89,7 @@ params = default_model_params(img_height,word2int.vocabulary_size())
 val_split = 0.1
 batch_size = params['batch_size']
 max_epochs = 64000
-early_stopping_patience = 50
+early_stopping_patience = 20
 number_of_epochs_before_reducing_learning_rate = 8
 learning_rate_reduction_factor = 0.2
 minimum_learning_rate = 0.00001
@@ -102,10 +102,15 @@ corpus_dirpath = args.corpus
 corpus_file = open(args.set,'r')
 corpus_list = corpus_file.read().splitlines()
 corpus_file.close()
+random.shuffle(corpus_list)
+
+### Use a portion of data for testing
+test_portion = .25
+test_portion_idx = int(len(corpus_list) * test_portion)
+corpus_list = corpus_list[:test_portion_idx]
 
 # Train and validation split
-random.shuffle(corpus_list) 
-val_idx = int(len(corpus_list) * val_split) 
+val_idx = int(len(corpus_list) * val_split)
 training_list = corpus_list[val_idx:]
 validation_list = corpus_list[:val_idx]
 

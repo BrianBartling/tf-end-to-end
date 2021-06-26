@@ -248,8 +248,6 @@ def ctc_crnn(params):
     features = tf.keras.layers.Reshape(target_shape = target_shape, name="reshape")(x) # not time major
 
     # Recurrent block
-    rnn_hidden_units = params['rnn_units']
-    rnn_hidden_layers = params['rnn_layers']
 
     # features = tf.keras.layers.Dense(64, activation="relu", name="dense1")(features)
     # features = tf.keras.layers.Dropout(0.2)(features)
